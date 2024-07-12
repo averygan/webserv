@@ -140,68 +140,124 @@ void Webserver::signal_handler(int signum)
     exit(signum);
 }
 
+// void	Webserver::run(void)
+// {
+// 	fd_set	read_sockets, write_sockets;
+// 	int		client_socket;
+// 	int		max_socket = _server_socket;
+
+// 	FD_ZERO(&_current_sockets);
+// 	FD_SET(_server_socket, &_current_sockets);
+
+// 	while (true)
+// 	{
+// 		read_sockets = _current_sockets;
+// 		write_sockets = _current_sockets;
+		
+// 		if (select(max_socket + 1, &read_sockets, &write_sockets, NULL, NULL) < 0)
+// 		{
+// 			std::cerr << strerror(errno);
+// 			exit(1);
+// 		}
+// 		int	i = 0;
+// 		while (i <= max_socket)
+// 		{
+// 			if (FD_ISSET(i, &read_sockets))
+// 			{
+// 				if (i == _server_socket) // New connection
+// 				{
+// 					client_socket = accept_new_connections();
+// 					FD_SET(client_socket, &_current_sockets);
+// 					if (client_socket > max_socket)
+// 						max_socket = client_socket;
+// 				}
+// 				else
+// 				{
+// 					handle_read_connection(i);
+// 					FD_CLR(i, &_current_sockets);
+// 				}
+// 			}
+// 			if (FD_ISSET(i, &write_sockets))
+// 			{
+// 				handle_write_connection(i);
+// 				//  Then delete client ???
+// 			}
+// 			i++;
+// 		}
+// 	}
+// }
+
 void	Webserver::run(void)
 {
-	fd_set	read_sockets, write_sockets;
-	int		client_socket;
-	int		max_socket = _server_socket;
-
-	FD_ZERO(&_current_sockets);
-	FD_SET(_server_socket, &_current_sockets);
+    std::vector<pollfd> poll_fds;
+    pollfd server_fd;
+    server_fd.fd = _server_socket;
+    server_fd.events = POLLIN;
+    poll_fds.push_back(server_fd);
 
 	while (true)
 	{
-		read_sockets = _current_sockets;
-		write_sockets = _current_sockets;
-		
-		if (select(max_socket + 1, &read_sockets, &write_sockets, NULL, NULL) < 0)
-		{
-			std::cerr << strerror(errno);
-			exit(1);
-		}
-		int	i = 0;
-		while (i <= max_socket)
-		{
-			if (FD_ISSET(i, &read_sockets))
-			{
-				if (i == _server_socket) // New connection
-				{
-					client_socket = accept_new_connections();
-					FD_SET(client_socket, &_current_sockets);
-					if (client_socket > max_socket)
-						max_socket = client_socket;
-				}
-				else
-				{
-					handle_read_connection(i);
-					FD_CLR(i, &_current_sockets);
-				}
-			}
-			if (FD_ISSET(i, &write_sockets))
-			{
-				handle_write_connection(i);
-				//  Then delete client ???
-			}
-			i++;
-		}
+	    int poll_count = poll(poll_fds.data(), poll_fds.size(), -1);
+
+	    if (poll_count < 0)
+	    {
+	    	std::cout << "poll count is < 0" << std::endl;
+	        std::cerr << strerror(errno);
+	        exit(1);
+	    }
+
+	    for (size_t i = 0; i < poll_fds.size(); i++)
+	    {
+	        if (poll_fds[i].revents & POLLIN)
+	        {
+	            if (poll_fds[i].fd == _server_socket) // New connection
+	            {
+	            	int client_socket = accept_new_connections();
+	            	if (client_socket >= 0)
+	            	{
+		                pollfd client_fd;
+		                client_fd.fd = client_socket;
+		                client_fd.events = POLLIN | POLLOUT;
+		                poll_fds.push_back(client_fd);
+	               	}
+	            }
+	            else
+	            {
+	                if (handle_read_connection(poll_fds[i].fd) == -1)
+	                {
+	                    close(poll_fds[i].fd);
+	                    poll_fds.erase(poll_fds.begin() + i);
+	                    i--; // adjust index after erase
+	                }
+	                else
+						poll_fds[i].events &= ~POLLIN; // Clear the read event
+	            }
+	        }
+
+	        if (poll_fds[i].revents & POLLOUT)
+	        {
+	        	std::cout << "writing to client" << std::endl;
+	            handle_write_connection(poll_fds[i].fd);
+	            poll_fds[i].events &= ~POLLOUT; // Clear the write event
+	        }
+	    }
 	}
 }
 
-void	Webserver::handle_read_connection(int client_socket)
+int	Webserver::handle_read_connection(int client_socket)
 {
 	char	buffer[BUFFER_SIZE];
 	int		bytes_read = recv(client_socket, buffer, BUFFER_SIZE, 0);
 
 	if (bytes_read < 0)
 	{
-		close(client_socket);
-		FD_CLR(client_socket, &_current_sockets);
 		std::cerr << strerror(errno) << std::endl;
+		return -1;
 	}
 	if (bytes_read == 0)
 	{
-		FD_CLR(client_socket, &_current_sockets);
 		std::cout << "Client closed the connection\n";
+		return -1;
 	}
 	Request*	request = new Request(buffer);
 	getClient(client_socket)->setRequest(*request);
@@ -210,7 +266,7 @@ void	Webserver::handle_read_connection(int client_socket)
 
 	Response	*response = new Response(request);
 	getClient(client_socket)->setResponse(*response);
-
+	return 0;
 }
 
 void		Webserver::handle_write_connection(int client_socket)
@@ -218,7 +274,9 @@ void		Webserver::handle_write_connection(int client_socket)
 	Client	*client = getClient(client_socket);
 
 	if (!client->getResponse())
+	{
 		return ;
+	}
 
 	send(client->getSocket(), client->getResponse()->getFullResponse().c_str(), client->getResponse()->getFullResponse().size() + 1, 0);
 }

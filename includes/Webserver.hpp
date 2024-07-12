@@ -28,6 +28,7 @@
 # include <csignal>
 # include <errno.h>
 # include <map>
+# include <poll.h>
 
 # define BUFFER_SIZE 5000
 
@@ -52,8 +53,8 @@ class Webserver
 		void			run(void);
 		void			check(int num);
 		int				accept_new_connections();
-		void			handle_read_connection(int i);
-		void			handle_write_connection(int client_socket);
+		int				handle_read_connection(int i);
+		void				handle_write_connection(int client_socket);
 		static void		signal_handler(int signum);
 
 		// Accessors

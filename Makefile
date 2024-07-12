@@ -70,7 +70,7 @@ clean:
 
 fclean: clean
 	@rm -fr $(NAME)
-	@echo "$(B_GREEN)fclean completed$(END)"
+	@echo "$(B_GREEN)fclean completed.$(END)"
 
 re: fclean all
 

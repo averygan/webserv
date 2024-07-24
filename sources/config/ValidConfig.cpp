@@ -151,6 +151,8 @@ void	ValidConfig::setRoot(const t_strvec& tokens)
 	if (tokens.size() != 1)
 		throw InvalidConfigError(PARAM_COUNT_ERR);
 
+	if (tokens[0][tokens[0].size() - 1] != '/')
+		throw InvalidConfigError("Root directory should end with '/'");
 	if (!isDirectory(tokens[0]))
 		throw InvalidConfigError("Invalid root directory");
 	this->_root = tokens[0];

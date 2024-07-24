@@ -89,7 +89,7 @@ void	Cluster::initEpoll(void)
 		int					socket_fd = it->first;
 
 		ep_event.data.fd = socket_fd;
-		ep_event.events = EPOLLIN | EPOLLOUT;
+		ep_event.events = EPOLLIN | EPOLLOUT | EPOLLERR;
 		addToEpoll(socket_fd, &ep_event);
 	}
 }
@@ -136,7 +136,12 @@ void	Cluster::runServers(void)
 			int	fd = ep_events[i].data.fd;
 			int	event_type = ep_events[i].events;
 
-			if (is_server_socket(fd) && (event_type & EPOLLIN))
+			if (event_type & EPOLLERR)
+			{
+				std::cerr << strerror(errno) << std::endl;
+				close(fd);
+			}
+			else if (is_server_socket(fd) && (event_type & EPOLLIN))
 				_servers[fd]->accept_new_connections();
 			else
 				handle_client_events(fd, event_type);

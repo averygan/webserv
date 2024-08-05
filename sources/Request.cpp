@@ -352,6 +352,11 @@ void Request::initRequest()
 	this->parseRequest(header);
 	this->parsePort(header);
 	this->parseHeader(header);
+	if (this->_error != NO_ERR) 
+	{
+		_req_complete = true;
+		return ;
+	}
 	// Check if encoding chunked
 	if (this->_headers.find("transfer-encoding") != this->_headers.end())
 	{
